@@ -415,6 +415,35 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 	}
 
 	/**
+	 * Programmatically drop a single index if it exists (idempotent).
+	 *
+	 * @param {string} pTableName
+	 * @param {string} pIndexName
+	 * @param {Function} fCallback - callback(pError)
+	 */
+	dropIndex(pTableName, pIndexName, fCallback)
+	{
+		if (!this._ConnectionPool)
+		{
+			this.log.error(`Meadow-PostgreSQL DROP INDEX ${pIndexName} failed: not connected.`);
+			return fCallback(new Error('Not connected to PostgreSQL'));
+		}
+
+		// PostgreSQL indexes are schema-scoped (not named per-table in DROP).
+		this._ConnectionPool.query(`DROP INDEX IF EXISTS "${pIndexName}"`,
+			(pDropError) =>
+			{
+				if (pDropError)
+				{
+					this.log.error(`Meadow-PostgreSQL DROP INDEX ${pIndexName} failed!`, pDropError);
+					return fCallback(pDropError);
+				}
+				this.log.info(`Meadow-PostgreSQL DROP INDEX ${pIndexName} executed.`);
+				return fCallback();
+			});
+	}
+
+	/**
 	 * Programmatically create all indices for a single table.
 	 *
 	 * @param {object} pMeadowTableSchema - Meadow table schema object

@@ -122,6 +122,11 @@ class MeadowConnectionPostgreSQL extends libFableServiceProviderBase
 		return this._SchemaProvider.createIndex(pIndexStatement, fCallback);
 	}
 
+	dropIndex(pTableName, pIndexName, fCallback)
+	{
+		return this._SchemaProvider.dropIndex(pTableName, pIndexName, fCallback);
+	}
+
 	createIndices(pMeadowTableSchema, fCallback)
 	{
 		return this._SchemaProvider.createIndices(pMeadowTableSchema, fCallback);
@@ -228,6 +233,18 @@ class MeadowConnectionPostgreSQL extends libFableServiceProviderBase
 	get pool()
 	{
 		return this._ConnectionPool;
+	}
+
+	/**
+	 * The configured connection pool size (max connections).  Exposed so
+	 * pool-aware consumers (e.g. the sync engine's per-record fan-out) can
+	 * default their concurrency to the pool size and avoid oversubscribing it.
+	 * @returns {number}
+	 */
+	get connectionPoolLimit()
+	{
+		let tmpPostgreSQLSettings = this.options.PostgreSQL || {};
+		return tmpPostgreSQLSettings.max || tmpPostgreSQLSettings.ConnectionPoolLimit || 10;
 	}
 }
 
