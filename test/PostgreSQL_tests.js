@@ -212,12 +212,12 @@ suite
 						Expect(tmpResult).to.contain('DECIMAL(10,2)');
 						Expect(tmpResult).to.contain('"Description" TEXT');
 						Expect(tmpResult).to.contain('"Birthday" TIMESTAMP');
-						Expect(tmpResult).to.contain('"Active" BOOLEAN');
+						Expect(tmpResult).to.contain('"Active" SMALLINT');
 						Expect(tmpResult).to.contain('"IDFarm" INTEGER');
 						// No spurious NOT NULL on business columns (only on ID/GUID).
 						Expect(tmpResult).to.not.contain('"Name" VARCHAR(128) NOT NULL');
 						Expect(tmpResult).to.not.contain('"Age" INTEGER NOT NULL');
-						Expect(tmpResult).to.not.contain('"Active" BOOLEAN NOT NULL');
+						Expect(tmpResult).to.not.contain('"Active" SMALLINT NOT NULL');
 						// Should NOT contain MySQL-specific syntax
 						Expect(tmpResult).to.not.contain('AUTO_INCREMENT');
 						Expect(tmpResult).to.not.contain('TINYINT');
@@ -265,7 +265,7 @@ suite
 						// Default + explicit Nullable: true → plain type, no NOT NULL.
 						Expect(tmpResult).to.contain('"Title" VARCHAR(128),');
 						Expect(tmpResult).to.contain('"Count" INTEGER,');
-						Expect(tmpResult).to.contain('"Active" BOOLEAN,');
+						Expect(tmpResult).to.contain('"Active" SMALLINT,');
 						Expect(tmpResult).to.contain('"ParentID" INTEGER');
 						// Explicit Nullable: false → NOT NULL (no spurious DEFAULT —
 						// callers layer a meaningful default on top if they want one).
@@ -545,9 +545,13 @@ suite
 								Expect(pColumns[6].Column).to.equal('Birthday');
 								Expect(pColumns[6].DataType).to.equal('DateTime');
 
-								// Boolean column (native BOOLEAN)
+								// Boolean column. Booleans are stored as SMALLINT (0/1) for cross-engine SQL
+								// consistency, so a nullable smallint is indistinguishable from a small integer on
+								// introspection and comes back as Numeric. That round-trip is behaviorally lossless
+								// (Numeric regenerates as SMALLINT, the same storage the app reads as 0/1). Native
+								// BOOLEAN columns still introspect as Boolean via the boolean type branch.
 								Expect(pColumns[7].Column).to.equal('Active');
-								Expect(pColumns[7].DataType).to.equal('Boolean');
+								Expect(pColumns[7].DataType).to.equal('Numeric');
 
 								// ForeignKey column (no actual FK constraint, detected as Numeric)
 								Expect(pColumns[8].Column).to.equal('IDFarm');

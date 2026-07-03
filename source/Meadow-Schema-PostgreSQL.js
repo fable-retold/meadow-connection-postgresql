@@ -114,7 +114,10 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 					tmpCreateTableStatement += `        "${tmpColumn.Column}" TIMESTAMP${tmpNotNull}`;
 					break;
 				case 'Boolean':
-					tmpCreateTableStatement += `        "${tmpColumn.Column}" BOOLEAN${tmpNotNull}`;
+					// SMALLINT (0/1), not the native BOOLEAN type, so the same soft-delete + boolean SQL that
+					// the SQLite/MySQL engines emit (e.g. `SET "Deleted" = 1`, `WHERE "Deleted" = 0`) works
+					// here too. Native BOOLEAN rejects the integer literals meadow generates.
+					tmpCreateTableStatement += `        "${tmpColumn.Column}" SMALLINT${tmpNotNull}`;
 					break;
 				case 'JSON':
 					tmpCreateTableStatement += `        "${tmpColumn.Column}" TEXT${tmpNotNull}`;
@@ -1005,7 +1008,7 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 			case 'String': return '';
 			case 'Text': return '';
 			case 'DateTime': return '';
-			case 'Boolean': return false;
+			case 'Boolean': return 0;
 			case 'JSON': return {};
 			case 'JSONProxy': return {};
 			default: return '';
