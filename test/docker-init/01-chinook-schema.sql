@@ -175,3 +175,27 @@ CREATE INDEX IFK_invoice_line_track_id ON invoice_line (track_id);
 CREATE INDEX IFK_track_album_id ON track (album_id);
 CREATE INDEX IFK_track_genre_id ON track (genre_id);
 CREATE INDEX IFK_track_media_type_id ON track (media_type_id);
+
+-- Identity-resolution fixtures.  The chinook tables all use GENERATED AS
+-- IDENTITY keys; these cover the shapes that do not, which is what a data lake
+-- ingesting its own IDs produces.
+CREATE TABLE lake_ingest_style
+(
+    "IDLakeIngestStyle" INT NOT NULL PRIMARY KEY,
+    "Name" VARCHAR(64),
+    "Deleted" SMALLINT DEFAULT 0
+);
+
+CREATE TABLE lake_composite_key
+(
+    "IDPart" INT NOT NULL,
+    "IDWhole" INT NOT NULL,
+    "Name" VARCHAR(64),
+    PRIMARY KEY ("IDPart", "IDWhole")
+);
+
+CREATE TABLE lake_heap
+(
+    "Name" VARCHAR(64),
+    "Value" INT
+);

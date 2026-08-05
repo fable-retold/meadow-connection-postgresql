@@ -652,6 +652,13 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 
 		let tmpFKQuery = `SELECT kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema WHERE tc.table_name = $1 AND tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = 'public'`;
 
+		// Primary-key membership is deliberately separate from the SERIAL/IDENTITY
+		// detection below.  They answer different questions: a SERIAL column is one
+		// the database populates, a primary key is one that identifies a row.  A
+		// table whose key is assigned upstream (the private data lake ingests its
+		// own IDs) has the second without the first.
+		let tmpPKQuery = `SELECT kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema WHERE tc.table_name = $1 AND tc.constraint_type = 'PRIMARY KEY' AND tc.table_schema = 'public'`;
+
 		this._ConnectionPool.query(tmpColumnQuery, [pTableName],
 			(pError, pColumnResult) =>
 			{
@@ -670,30 +677,46 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 							return fCallback(pFKError);
 						}
 
-						let tmpFKColumnSet = new Set(pFKResult.rows.map((pRow) => { return pRow.column_name; }));
-
-						let tmpResult = [];
-						for (let i = 0; i < pColumnResult.rows.length; i++)
-						{
-							let tmpCol = pColumnResult.rows[i];
-							// Detect SERIAL/IDENTITY: integer with nextval() default, or GENERATED AS IDENTITY
-							let tmpIsSerial = (tmpCol.data_type === 'integer' && tmpCol.column_default && tmpCol.column_default.indexOf('nextval') >= 0) || (tmpCol.is_identity === 'YES');
-							let tmpTypeInfo = this._mapPostgreSQLTypeToMeadow(tmpCol, tmpIsSerial, tmpFKColumnSet);
-
-							let tmpColumnDef = {
-								Column: tmpCol.column_name,
-								DataType: tmpTypeInfo.DataType
-							};
-
-							if (tmpTypeInfo.Size)
+						this._ConnectionPool.query(tmpPKQuery, [pTableName],
+							(pPKError, pPKResult) =>
 							{
-								tmpColumnDef.Size = tmpTypeInfo.Size;
-							}
+								if (pPKError)
+								{
+									this.log.error(`Meadow-PostgreSQL introspectTableColumns PK query for ${pTableName} failed!`, pPKError);
+									return fCallback(pPKError);
+								}
 
-							tmpResult.push(tmpColumnDef);
-						}
+								let tmpFKColumnSet = new Set(pFKResult.rows.map((pRow) => { return pRow.column_name; }));
+								let tmpPKColumnSet = new Set(pPKResult.rows.map((pRow) => { return pRow.column_name; }));
 
-						return fCallback(null, tmpResult);
+								let tmpResult = [];
+								for (let i = 0; i < pColumnResult.rows.length; i++)
+								{
+									let tmpCol = pColumnResult.rows[i];
+									// Detect SERIAL/IDENTITY: integer with nextval() default, or GENERATED AS IDENTITY
+									let tmpIsSerial = (tmpCol.data_type === 'integer' && tmpCol.column_default && tmpCol.column_default.indexOf('nextval') >= 0) || (tmpCol.is_identity === 'YES');
+									let tmpTypeInfo = this._mapPostgreSQLTypeToMeadow(tmpCol, tmpIsSerial, tmpFKColumnSet);
+
+									let tmpColumnDef = {
+										Column: tmpCol.column_name,
+										DataType: tmpTypeInfo.DataType
+									};
+
+									if (tmpTypeInfo.Size)
+									{
+										tmpColumnDef.Size = tmpTypeInfo.Size;
+									}
+
+									if (tmpPKColumnSet.has(tmpCol.column_name))
+									{
+										tmpColumnDef.IsPrimaryKey = true;
+									}
+
+									tmpResult.push(tmpColumnDef);
+								}
+
+								return fCallback(null, tmpResult);
+							});
 					});
 			});
 	}
@@ -1060,7 +1083,8 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 					return fCallback(pError);
 				}
 
-				let tmpDefaultIdentifier = '';
+				let tmpSerialIdentifier = '';
+				let tmpPrimaryKeyColumns = [];
 				let tmpSchemaEntries = [];
 				let tmpDefaultObject = {};
 
@@ -1071,7 +1095,12 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 
 					if (tmpCol.DataType === 'ID')
 					{
-						tmpDefaultIdentifier = tmpCol.Column;
+						tmpSerialIdentifier = tmpCol.Column;
+					}
+
+					if (tmpCol.IsPrimaryKey)
+					{
+						tmpPrimaryKeyColumns.push(tmpCol.Column);
 					}
 
 					let tmpEntry = {
@@ -1086,6 +1115,23 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 
 					tmpSchemaEntries.push(tmpEntry);
 					tmpDefaultObject[tmpCol.Column] = this._getDefaultValue(tmpCol.DataType);
+				}
+
+				// meadow stamps DefaultIdentifier onto every query and the foxhound
+				// dialects order capped reads by it, so it has to name a column that
+				// provably identifies a row.  A single-column primary key is that
+				// column whether or not the database generates its value; the SERIAL
+				// column is only a fallback for tables introspected without a
+				// declared key.  A composite key has no scalar answer, so it yields
+				// none rather than an arbitrary member.
+				let tmpDefaultIdentifier = '';
+				if (tmpPrimaryKeyColumns.length === 1)
+				{
+					tmpDefaultIdentifier = tmpPrimaryKeyColumns[0];
+				}
+				else if (tmpPrimaryKeyColumns.length < 1)
+				{
+					tmpDefaultIdentifier = tmpSerialIdentifier;
 				}
 
 				let tmpPackage = {

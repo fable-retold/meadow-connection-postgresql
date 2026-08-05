@@ -1058,6 +1058,60 @@ suite
 							});
 					}
 				);
+
+				test
+				(
+					'a primary key the database does not generate is still the DefaultIdentifier',
+					(fDone) =>
+					{
+						libSchemaPostgreSQL.generateMeadowPackageFromTable('lake_ingest_style',
+							(pError, pPackage) =>
+							{
+								Expect(pError).to.not.exist;
+								Expect(pPackage.DefaultIdentifier).to.equal('IDLakeIngestStyle');
+
+								// The column is not SERIAL, so it is not database-generated
+								// and must not be typed AutoIdentity — an INSERT would emit
+								// DEFAULT into a column that has none.
+								let tmpIDEntry = pPackage.Schema.find((pEntry) => { return pEntry.Column === 'IDLakeIngestStyle'; });
+								Expect(tmpIDEntry.Type).to.not.equal('AutoIdentity');
+
+								return fDone();
+							});
+					}
+				);
+
+				test
+				(
+					'a composite primary key yields no DefaultIdentifier',
+					(fDone) =>
+					{
+						libSchemaPostgreSQL.generateMeadowPackageFromTable('lake_composite_key',
+							(pError, pPackage) =>
+							{
+								Expect(pError).to.not.exist;
+								Expect(pPackage.DefaultIdentifier).to.equal('');
+
+								return fDone();
+							});
+					}
+				);
+
+				test
+				(
+					'a table with no primary key yields no DefaultIdentifier',
+					(fDone) =>
+					{
+						libSchemaPostgreSQL.generateMeadowPackageFromTable('lake_heap',
+							(pError, pPackage) =>
+							{
+								Expect(pError).to.not.exist;
+								Expect(pPackage.DefaultIdentifier).to.equal('');
+
+								return fDone();
+							});
+					}
+				);
 			}
 		);
 	}
