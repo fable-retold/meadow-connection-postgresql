@@ -126,6 +126,7 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 					tmpCreateTableStatement += `        "${tmpColumn.StorageColumn}" TEXT${tmpNotNull}`;
 					break;
 				default:
+					this.log.error(`Meadow-PostgreSQL ${pMeadowTableSchema.TableName}.${tmpColumn.Column} has unsupported DataType [${tmpColumn.DataType}]; no column definition was emitted and the generated DDL will be malformed.`);
 					break;
 			}
 		}
@@ -170,7 +171,7 @@ class MeadowSchemaPostgreSQL extends libFableServiceProviderBase
 					}
 					else
 					{
-						this.log.error(`Meadow-PostgreSQL CREATE TABLE ${pMeadowTableSchema.TableName} failed!`, pError);
+						this.log.error(`Meadow-PostgreSQL CREATE TABLE ${pMeadowTableSchema.TableName} failed: ${pError}`, pError);
 						return fCallback(pError);
 					}
 				}
